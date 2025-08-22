@@ -12,7 +12,6 @@
       align-items: center;
       height: 100vh;
       font-family: Arial, sans-serif;
-      touch-action: none; /* Evita scroll accidental en móviles */
     }
     canvas {
       background: white;
@@ -31,7 +30,7 @@
 </head>
 <body>
   <div class="instructions">
-    <p>Toca la pantalla o presiona ESPACIO/↑ para empezar a jugar</p>
+    <p>Presiona ESPACIO o FLECHA ARRIBA para empezar a jugar</p>
   </div>
   <canvas id="gameCanvas" width="800" height="200"></canvas>
 
@@ -39,69 +38,366 @@
     const canvas = document.getElementById("gameCanvas");
     const ctx = canvas.getContext("2d");
 
-    // 🔹 Imágenes
+    // 🔹 Imágenes (asegúrate de tener la carpeta /img junto a index.html)
     const dinoImg = new Image();
-    dinoImg.src = "bianca.png";   
+    dinoImg.src = "bianca.png";   // tu personaje
     const cactusImg = new Image();
-    cactusImg.src = "lapiz.png"; 
+    cactusImg.src = "lapiz.png"; // obstáculo normal
     const finalImg = new Image();
-    finalImg.src = "girasol.png";   
+    finalImg.src = "girasol.png";   // objeto final
 
     // 🔹 Variables del juego
-    let dino = {x: 50, y: 140, width: 40, height: 40, vy: 0, jump: false, onGround: true};
-    let gravity = 0.8, jumpForce = -13, ground = 140;
-    let obstacles = [], score = 0, gameOver = false, gameStarted = false, finalPhase = false;
-    let gameSpeed = 4, baseSpeed = 4, imagesLoaded = false, lastObstacleTime = 0;
+    let dino = { 
+      x: 50, 
+      y: 140, 
+      width: 40, 
+      height: 40, 
+      vy: 0, 
+      jump: false,
+      onGround: true 
+    };
+    let gravity = 0.8;
+    let jumpForce = -13;
+    let ground = 140;
+    let obstacles = [];
+    let score = 0;
+    let gameOver = false;
+    let gameStarted = false;
+    let finalPhase = false;
+    let gameSpeed = 4;
+    let baseSpeed = 4; // Velocidad base
+    let imagesLoaded = false;
+    let lastObstacleTime = 0; // Para controlar el espaciado
 
-    // 🔹 Función de salto
-    function doJump() {
-      if (!gameStarted) {
-        gameStarted = true;
-        document.querySelector('.instructions').style.display = 'none';
-        return;
-      }
-      if (gameOver) {
-        resetGame();
-        return;
-      }
-      if (dino.onGround) {
-        dino.jump = true;
-        dino.onGround = false;
-        dino.vy = jumpForce;
+    // Tipos de obstáculos con diferentes tamaños
+    const obstacleTypes = [
+      { width: 18, height: 28, type: 'normal' },      // Lápiz normal
+      { width: 15, height: 35, type: 'tall' },        // Lápiz alto
+      { width: 22, height: 22, type: 'wide' },        // Lápiz ancho y bajo
+      { width: 12, height: 40, type: 'thin' }         // Lápiz muy delgado y alto
+    ];
+
+    // 🔹 Función para cargar imágenes
+    function checkImagesLoaded() {
+      let loaded = 0;
+      [dinoImg, cactusImg, finalImg].forEach(img => {
+        if (img.complete && img.naturalWidth > 0) {
+          loaded++;
+        }
+      });
+      imagesLoaded = (loaded === 3);
+      return imagesLoaded;
+    }
+
+    function drawDino() {
+      if (imagesLoaded && dinoImg.complete) {
+        ctx.drawImage(dinoImg, dino.x, dino.y, dino.width, dino.height);
+      } else {
+        // Fallback si no cargan las imágenes
+        ctx.fillStyle = "#4CAF50";
+        ctx.fillRect(dino.x, dino.y, dino.width, dino.height);
+        ctx.fillStyle = "white";
+        ctx.fillRect(dino.x + 8, dino.y + 8, 6, 6);
+        ctx.fillRect(dino.x + 20, dino.y + 8, 6, 6);
+        ctx.fillStyle = "black";
+        ctx.fillRect(dino.x + 10, dino.y + 10, 2, 2);
+        ctx.fillRect(dino.x + 22, dino.y + 10, 2, 2);
       }
     }
 
-    // 🔹 Controles teclado
-    document.addEventListener("keydown", (e) => {
-      if (e.code === "Space" || e.code === "ArrowUp") {
-        e.preventDefault();
-        doJump();
-      }
-    });
+    function drawObstacles() {
+      obstacles.forEach(o => {
+        if (finalPhase) {
+          if (imagesLoaded && finalImg.complete) {
+            ctx.drawImage(finalImg, o.x, o.y, o.width, o.height);
+          } else {
+            // Fallback para girasol
+            ctx.fillStyle = "#FFD700";
+            ctx.fillRect(o.x, o.y, o.width, o.height);
+            ctx.fillStyle = "#8B4513";
+            ctx.fillRect(o.x + 8, o.y + 8, o.width - 16, o.height - 16);
+          }
+        } else {
+          if (imagesLoaded && cactusImg.complete) {
+            ctx.drawImage(cactusImg, o.x, o.y, o.width, o.height);
+          } else {
+            // Fallbacks diferenciados por tipo
+            switch(o.obstacleType) {
+              case 'normal':
+                ctx.fillStyle = "#FFD700";
+                ctx.fillRect(o.x, o.y + 3, o.width, o.height - 6);
+                ctx.fillStyle = "black";
+                ctx.fillRect(o.x, o.y, o.width, 6);
+                break;
+              case 'tall':
+                ctx.fillStyle = "#FF6B35";
+                ctx.fillRect(o.x, o.y + 3, o.width, o.height - 6);
+                ctx.fillStyle = "black";
+                ctx.fillRect(o.x, o.y, o.width, 6);
+                break;
+              case 'wide':
+                ctx.fillStyle = "#4ECDC4";
+                ctx.fillRect(o.x, o.y + 2, o.width, o.height - 4);
+                ctx.fillStyle = "black";
+                ctx.fillRect(o.x, o.y, o.width, 4);
+                break;
+              case 'thin':
+                ctx.fillStyle = "#45B7D1";
+                ctx.fillRect(o.x, o.y + 4, o.width, o.height - 8);
+                ctx.fillStyle = "black";
+                ctx.fillRect(o.x, o.y, o.width, 8);
+                break;
+            }
+          }
+        }
+      });
+    }
 
-    // 🔹 Controles táctiles (pantallas móviles)
-    canvas.addEventListener("touchstart", (e) => {
-      e.preventDefault();
-      doJump();
-    });
+    function drawScore() {
+      ctx.fillStyle = "black";
+      ctx.font = "20px Arial";
+      ctx.fillText("Puntos: " + score, 580, 30);
+      
+      // Mostrar velocidad actual
+      ctx.font = "14px Arial";
+      ctx.fillStyle = "blue";
+      ctx.fillText("Velocidad: " + gameSpeed.toFixed(1), 580, 50);
+    }
 
-    // 🔹 Restablecer juego
+    function drawStartMessage() {
+      ctx.fillStyle = "gray";
+      ctx.font = "24px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("Presiona ESPACIO para comenzar", canvas.width / 2, canvas.height / 2);
+      
+      ctx.font = "14px Arial";
+      ctx.fillStyle = "blue";
+      ctx.fillText("Salto balanceado - Obstáculos espaciados", canvas.width / 2, canvas.height / 2 + 30);
+      ctx.textAlign = "left";
+    }
+
+    function drawWinMessage() {
+      ctx.fillStyle = "blue";
+      ctx.font = "30px Arial";
+      ctx.textAlign = "center";
+      ctx.fillText("🎉 ¡GANASTE! 🎉", canvas.width / 2, canvas.height / 2);
+      ctx.textAlign = "left";
+    }
+
+    function drawGround() {
+      ctx.fillStyle = "#8B4513";
+      ctx.fillRect(0, ground + dino.height, canvas.width, 10);
+    }
+
+    function checkCollision(rect1, rect2) {
+      // Reducir el área de colisión para que sea más precisa
+      const margin = 3; // Margen reducido para obstáculos más pequeños
+      return rect1.x + margin < rect2.x + rect2.width - margin &&
+             rect1.x + rect1.width - margin > rect2.x + margin &&
+             rect1.y + margin < rect2.y + rect2.height - margin &&
+             rect1.y + rect1.height - margin > rect2.y + margin;
+    }
+
     function resetGame() {
-      dino = {x: 50, y: ground, width: 40, height: 40, vy: 0, jump: false, onGround: true};
+      dino = { 
+        x: 50, 
+        y: ground, 
+        width: 40, 
+        height: 40, 
+        vy: 0, 
+        jump: false,
+        onGround: true 
+      };
       obstacles = [];
       score = 0;
       gameOver = false;
       gameStarted = false;
       finalPhase = false;
-      gameSpeed = baseSpeed;
-      lastObstacleTime = 0;
+      gameSpeed = baseSpeed; // Resetear a velocidad base
+      lastObstacleTime = 0; // Reset del timer de obstáculos
     }
 
-    // 🔹 Resto de funciones (dibujar, físicas, colisiones, update...)
-    // 🔻 Aquí pegas exactamente todas tus funciones drawDino(), drawObstacles(), checkCollision(), update(), etc.
+    // 🔹 Cargar imágenes antes de comenzar
+    let loadedImages = 0;
+    [dinoImg, cactusImg, finalImg].forEach(img => {
+      img.onload = () => {
+        loadedImages++;
+        if (loadedImages === 3) {
+          imagesLoaded = true;
+        }
+      };
+      // Si la imagen no carga, continuar de cualquier forma
+      img.onerror = () => {
+        loadedImages++;
+        if (loadedImages === 3) {
+          // Usar fallbacks si las imágenes no cargan
+          console.warn("Algunas imágenes no pudieron cargar, usando diseño básico");
+        }
+      };
+    });
 
-    // 🔹 Iniciar loop del juego
+    function update() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      drawGround();
+
+      if (!gameStarted) {
+        drawDino();
+        drawStartMessage();
+        drawScore();
+        requestAnimationFrame(update);
+        return;
+      }
+
+      if (gameOver) {
+        drawDino();
+        drawObstacles();
+        drawScore();
+        requestAnimationFrame(update);
+        return;
+      }
+
+      // Física del salto mejorada
+      if (dino.jump || !dino.onGround) {
+        dino.vy += gravity;
+        dino.y += dino.vy;
+        
+        // Verificar si toca el suelo
+        if (dino.y >= ground) {
+          dino.y = ground;
+          dino.vy = 0;
+          dino.jump = false;
+          dino.onGround = true;
+        } else {
+          dino.onGround = false;
+        }
+      }
+
+      // Mover obstáculos con velocidad progresiva
+      obstacles.forEach(o => o.x -= gameSpeed);
+      
+      // Eliminar obstáculos que salen de pantalla y aumentar puntuación
+      if (obstacles.length && obstacles[0].x < -50) {
+        obstacles.shift();
+        score++;
+        
+        // Aumentar velocidad progresivamente cada 5 puntos
+        if (score % 5 === 0) {
+          gameSpeed = baseSpeed + (score * 0.1); // Incremento gradual
+        }
+      }
+
+      // Generar obstáculos aleatorios con espaciado controlado
+      const currentTime = Date.now();
+      const minTimeBetweenObstacles = Math.max(800, 1500 - (score * 10)); // Menos tiempo entre obstáculos conforme avanza
+      
+      if (!finalPhase && Math.random() < 0.012 && 
+          currentTime - lastObstacleTime > minTimeBetweenObstacles) {
+        
+        // Seleccionar tipo de obstáculo aleatorio
+        const randomType = obstacleTypes[Math.floor(Math.random() * obstacleTypes.length)];
+        
+        obstacles.push({ 
+          x: canvas.width, 
+          y: ground + dino.height - randomType.height, 
+          width: randomType.width, 
+          height: randomType.height,
+          obstacleType: randomType.type
+        });
+        lastObstacleTime = currentTime;
+      }
+
+      // Cambiar a 100 puntos para la fase final
+      if (score >= 100 && !finalPhase) {
+        finalPhase = true;
+        obstacles = [];
+        gameSpeed = Math.max(6, gameSpeed * 0.7); // Reducir velocidad en fase final pero no demasiado
+        lastObstacleTime = 0; // Reset del timer
+      }
+
+      // En la fase final genera girasoles con espaciado
+      const minTimeFinalPhase = 2000; // 2 segundos en fase final
+      if (finalPhase && Math.random() < 0.008 && 
+          currentTime - lastObstacleTime > minTimeFinalPhase) {
+        obstacles.push({ 
+          x: canvas.width, 
+          y: ground + dino.height - 32, 
+          width: 26, 
+          height: 32,
+          obstacleType: 'final'
+        });
+        lastObstacleTime = currentTime;
+      }
+
+      // Detección de colisiones mejorada
+      obstacles.forEach(o => {
+        if (checkCollision(dino, o)) {
+          if (finalPhase) {
+            // En fase final, tocar el girasol es ganar
+            gameOver = true;
+            setTimeout(() => {
+              alert("ganaste corazon Completaste el juego con " + score + " puntos!💖");
+              resetGame();
+            }, 100);
+          } else {
+            // En fase normal, es perder
+            gameOver = true;
+            setTimeout(() => {
+              alert("💀 ¡Perdiste! Puntos: " + score);
+              resetGame();
+            }, 100);
+          }
+        }
+      });
+
+      // Dibujar todo
+      drawDino();
+      drawObstacles();
+      drawScore();
+
+      // Mensaje de fase final
+      if (finalPhase) {
+        drawWinMessage();
+      }
+
+      requestAnimationFrame(update);
+    }
+
+    // 🔹 Controles mejorados
+    document.addEventListener("keydown", (e) => {
+      if (e.code === "Space" || e.code === "ArrowUp") {
+        e.preventDefault();
+        
+        if (!gameStarted) {
+          gameStarted = true;
+          return;
+        }
+        
+        if (gameOver) {
+          resetGame();
+          return;
+        }
+        
+        // Solo saltar si está en el suelo
+        if (dino.onGround) {
+          dino.jump = true;
+          dino.onGround = false;
+          dino.vy = jumpForce;
+        }
+      }
+    });
+
+    // Ocultar instrucciones cuando empiece el juego
+    document.addEventListener("keydown", (e) => {
+      if (gameStarted) {
+        document.querySelector('.instructions').style.display = 'none';
+      }
+    });
+
+    // Iniciar el loop del juego
     update();
   </script>
 </body>
+
 </html>
+
