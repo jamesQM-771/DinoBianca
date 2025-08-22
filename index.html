@@ -387,6 +387,28 @@
       }
     });
 
+    // Agregar controles táctiles
+    canvas.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      if (!gameStarted) {
+        gameStarted = true;
+        document.querySelector('.instructions').style.display = 'none';
+        return;
+      }
+      
+      if (gameOver) {
+        resetGame();
+        return;
+      }
+      
+      // Solo saltar si está en el suelo
+      if (dino.onGround) {
+        dino.jump = true;
+        dino.onGround = false;
+        dino.vy = jumpForce;
+      }
+    });
+
     // Ocultar instrucciones cuando empiece el juego
     document.addEventListener("keydown", (e) => {
       if (gameStarted) {
@@ -398,6 +420,4 @@
     update();
   </script>
 </body>
-
 </html>
-
